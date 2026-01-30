@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { IMTState, IMTNode, InsertPreview, InsertResult, MerkleProof } from '@/lib/imt/types';
-import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot } from '@/lib/imt/engine';
+import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot, getNodeByKey } from '@/lib/imt/engine';
 import { generateProof } from '@/lib/imt/proof';
 import { storage } from '@/lib/storage/localStorage';
 
@@ -14,6 +14,13 @@ interface PreviewState {
   isInserted?: boolean;
 }
 
+interface ProofState {
+  queryKey: bigint;
+  proof: MerkleProof;
+  // For exclusion proofs, the node that the low nullifier points to
+  nextKeyNode: IMTNode | null;
+}
+
 interface IMTContextValue {
   // State
   tree: IMTState | null;
@@ -21,6 +28,7 @@ interface IMTContextValue {
   preview: PreviewState | null;
   recentlyInsertedIndex: number | null;
   recentlyUpdatedIndex: number | null;
+  membershipProof: ProofState | null;
   
   // Actions
   initializeTree: (depth: number) => void;
@@ -30,6 +38,8 @@ interface IMTContextValue {
   resetTree: () => void;
   getProof: (key: bigint) => MerkleProof | { error: string };
   clearHighlights: () => void;
+  generateMembershipProof: (key: bigint) => { error: string } | void;
+  clearMembershipProof: () => void;
 }
 
 const IMTContext = createContext<IMTContextValue | null>(null);
@@ -40,6 +50,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const [preview, setPreviewState] = useState<PreviewState | null>(null);
   const [recentlyInsertedIndex, setRecentlyInsertedIndex] = useState<number | null>(null);
   const [recentlyUpdatedIndex, setRecentlyUpdatedIndex] = useState<number | null>(null);
+  const [membershipProof, setMembershipProof] = useState<ProofState | null>(null);
 
   // Load tree from storage on mount
   useEffect(() => {
@@ -67,6 +78,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     setPreviewState(null);
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setMembershipProof(null);
   }, []);
 
   const insertNode = useCallback((key: bigint): InsertResult | { error: string } => {
@@ -81,6 +93,9 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     }
 
     setTree(result.state);
+    
+    // Clear membership proof when inserting
+    setMembershipProof(null);
     
     // Keep the panel open but update to show inserted state
     setPreviewState({
@@ -105,9 +120,10 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const setPreview = useCallback((key: bigint) => {
     if (!tree) return;
 
-    // Clear previous highlights when initiating a new preview
+    // Clear previous highlights and membership proof when initiating a new preview
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setMembershipProof(null);
 
     const result = imtPreviewInsert(tree, key);
     
@@ -134,6 +150,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     setPreviewState(null);
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setMembershipProof(null);
   }, []);
 
   const getProof = useCallback((key: bigint): MerkleProof | { error: string } => {
@@ -148,12 +165,47 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     setRecentlyUpdatedIndex(null);
   }, []);
 
+  const generateMembershipProof = useCallback((key: bigint): { error: string } | void => {
+    if (!tree) {
+      return { error: 'Tree not initialized' };
+    }
+
+    // Clear any existing preview
+    setPreviewState(null);
+    setRecentlyInsertedIndex(null);
+    setRecentlyUpdatedIndex(null);
+
+    const result = generateProof(tree, key);
+    
+    if ('error' in result) {
+      setMembershipProof(null);
+      return result;
+    }
+
+    // For exclusion proofs, find the next key node (what the low nullifier points to)
+    let nextKeyNode: IMTNode | null = null;
+    if (result.type === 'exclusion') {
+      nextKeyNode = getNodeByKey(tree, result.lowNode.nextKey);
+    }
+
+    setMembershipProof({
+      queryKey: key,
+      proof: result,
+      nextKeyNode,
+    });
+  }, [tree]);
+
+  const clearMembershipProof = useCallback(() => {
+    setMembershipProof(null);
+  }, []);
+
   const value: IMTContextValue = {
     tree,
     isLoading,
     preview,
     recentlyInsertedIndex,
     recentlyUpdatedIndex,
+    membershipProof,
     initializeTree,
     insertNode,
     setPreview,
@@ -161,6 +213,8 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     resetTree,
     getProof,
     clearHighlights,
+    generateMembershipProof,
+    clearMembershipProof,
   };
 
   return (

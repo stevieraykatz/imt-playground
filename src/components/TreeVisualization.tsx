@@ -4,6 +4,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic';
 import { useIMT } from '@/context/IMTContext';
 import { InternalNodePanel } from './InternalNodePanel';
+import { ProofPanel } from './ProofPanel';
 import { CopyButton } from './CopyButton';
 import type { IMTNode, IMTState } from '@/lib/imt/types';
 import { MAX_KEY } from '@/lib/imt/types';
@@ -482,7 +483,7 @@ function SelectedNodePanel({ selectedNode, tree, onClose }: SelectedNodePanelPro
 }
 
 export function TreeVisualization() {
-  const { tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex, clearPreview } = useIMT();
+  const { tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex, clearPreview, membershipProof, clearMembershipProof } = useIMT();
   const [selectedLeafNode, setSelectedLeafNode] = useState<IMTNode | null>(null);
   const [selectedInternalNode, setSelectedInternalNode] = useState<{
     hash: string;
@@ -544,8 +545,8 @@ export function TreeVisualization() {
     // Add padding for UI elements (legend on right, root hash on left)
     const uiPaddingX = 280; // Account for sidebars/legends
     const uiPaddingTop = 80; // Space for root hash display
-    // Reserve space for preview panel at bottom when visible
-    const previewPanelHeight = preview ? 220 : 0;
+    // Reserve space for preview panel or proof panel at bottom when visible
+    const previewPanelHeight = preview || membershipProof ? 280 : 0;
     
     const availableWidth = containerSize.width - uiPaddingX - (marginX * 2);
     const availableHeight = containerSize.height - uiPaddingTop - previewPanelHeight - (marginY * 2);
@@ -564,7 +565,7 @@ export function TreeVisualization() {
     const translateY = uiPaddingTop + marginY;
     
     return { zoom: finalZoom, translate: { x: translateX, y: translateY } };
-  }, [tree, containerSize, preview]);
+  }, [tree, containerSize, preview, membershipProof]);
 
   // Build tree data structure for react-d3-tree
   const treeData = useMemo((): TreeNodeData | null => {
@@ -878,11 +879,22 @@ export function TreeVisualization() {
       {preview && <PreviewPanel preview={preview} nextKeyNode={previewNextKeyNode} tree={tree} />}
 
       {/* Selected node panel - fixed to bottom (for clicked leaf nodes) */}
-      {!preview && selectedLeafNode && (
+      {!preview && !membershipProof && selectedLeafNode && (
         <SelectedNodePanel
           selectedNode={selectedLeafNode}
           tree={tree}
           onClose={() => setSelectedLeafNode(null)}
+        />
+      )}
+
+      {/* Proof panel - fixed to bottom (for both inclusion and exclusion proofs) */}
+      {!preview && membershipProof && (
+        <ProofPanel
+          queryKey={membershipProof.queryKey}
+          proof={membershipProof.proof}
+          nextKeyNode={membershipProof.nextKeyNode}
+          tree={tree}
+          onClose={clearMembershipProof}
         />
       )}
 

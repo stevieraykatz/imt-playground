@@ -8,16 +8,21 @@ export function ControlPanel() {
     tree, 
     isLoading, 
     preview,
+    membershipProof,
     initializeTree, 
     insertNode, 
     setPreview, 
     clearPreview,
-    resetTree 
+    resetTree,
+    generateMembershipProof,
+    clearMembershipProof,
   } = useIMT();
 
   const [depth, setDepth] = useState(4);
   const [keyInput, setKeyInput] = useState('');
+  const [proofInput, setProofInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Sync depth state with tree's actual depth when loaded from storage
@@ -85,7 +90,27 @@ export function ControlPanel() {
     resetTree();
     setShowResetConfirm(false);
     setKeyInput('');
+    setProofInput('');
     setError(null);
+    setProofError(null);
+  };
+
+  const handleGenerateProof = () => {
+    setProofError(null);
+    
+    const key = parseHexInput(proofInput);
+    
+    if (key === null) {
+      setProofError('Invalid key format');
+      return;
+    }
+    
+    const result = generateMembershipProof(key);
+    
+    if (result && 'error' in result) {
+      setProofError(result.error);
+      return;
+    }
   };
 
   if (isLoading) {
@@ -203,6 +228,47 @@ export function ControlPanel() {
                 Clear Preview
               </button>
             )}
+          </div>
+
+          {/* Proof generation section */}
+          <div className="mt-6 pt-4 border-t border-zinc-800">
+            <h3 className="text-sm font-medium text-zinc-300 mb-3">Generate Proof</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-zinc-400 mb-1">Key to prove</label>
+                <input
+                  type="text"
+                  value={proofInput}
+                  onChange={(e) => setProofInput(e.target.value)}
+                  placeholder="0x1234... or 123"
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+              
+              {/* Proof error display */}
+              {proofError && (
+                <div className="p-2 bg-red-900/30 border border-red-600/50 rounded text-sm text-red-400">
+                  {proofError}
+                </div>
+              )}
+              
+              <button
+                onClick={handleGenerateProof}
+                disabled={!proofInput || tree?.nodes.length === 0}
+                className="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Generate Proof
+              </button>
+              
+              {membershipProof && (
+                <button
+                  onClick={clearMembershipProof}
+                  className="w-full bg-zinc-900 border border-zinc-700 py-2 rounded hover:bg-zinc-800 transition-colors text-zinc-400"
+                >
+                  Clear Proof
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Reset section */}
