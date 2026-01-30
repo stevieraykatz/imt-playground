@@ -1,0 +1,179 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import type { IMTState, IMTNode, InsertPreview, InsertResult, MerkleProof } from '@/lib/imt/types';
+import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot } from '@/lib/imt/engine';
+import { generateProof } from '@/lib/imt/proof';
+import { storage } from '@/lib/storage/localStorage';
+
+interface PreviewState {
+  newNode: IMTNode;
+  predecessorNode: IMTNode | null;
+  predecessorIndex: number | null;
+  predecessorNewNextKey: bigint | null;
+  isInserted?: boolean;
+}
+
+interface IMTContextValue {
+  // State
+  tree: IMTState | null;
+  isLoading: boolean;
+  preview: PreviewState | null;
+  recentlyInsertedIndex: number | null;
+  recentlyUpdatedIndex: number | null;
+  
+  // Actions
+  initializeTree: (depth: number) => void;
+  insertNode: (key: bigint) => InsertResult | { error: string };
+  setPreview: (key: bigint) => void;
+  clearPreview: () => void;
+  resetTree: () => void;
+  getProof: (key: bigint) => MerkleProof | { error: string };
+  clearHighlights: () => void;
+}
+
+const IMTContext = createContext<IMTContextValue | null>(null);
+
+export function IMTProvider({ children }: { children: ReactNode }) {
+  const [tree, setTree] = useState<IMTState | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [preview, setPreviewState] = useState<PreviewState | null>(null);
+  const [recentlyInsertedIndex, setRecentlyInsertedIndex] = useState<number | null>(null);
+  const [recentlyUpdatedIndex, setRecentlyUpdatedIndex] = useState<number | null>(null);
+
+  // Load tree from storage on mount
+  useEffect(() => {
+    const loadTree = async () => {
+      setIsLoading(true);
+      const stored = await storage.loadTree();
+      if (stored) {
+        setTree(stored);
+      }
+      setIsLoading(false);
+    };
+    loadTree();
+  }, []);
+
+  // Save tree to storage whenever it changes
+  useEffect(() => {
+    if (tree && !isLoading) {
+      storage.saveTree(tree);
+    }
+  }, [tree, isLoading]);
+
+  const initializeTree = useCallback((depth: number) => {
+    const newTree = createEmptyTree(depth);
+    setTree(newTree);
+    setPreviewState(null);
+    setRecentlyInsertedIndex(null);
+    setRecentlyUpdatedIndex(null);
+  }, []);
+
+  const insertNode = useCallback((key: bigint): InsertResult | { error: string } => {
+    if (!tree) {
+      return { error: 'Tree not initialized' };
+    }
+
+    const result = imtInsert(tree, key);
+    
+    if ('error' in result) {
+      return result;
+    }
+
+    setTree(result.state);
+    
+    // Keep the panel open but update to show inserted state
+    setPreviewState({
+      newNode: result.result.node,
+      predecessorNode: result.result.updatedPredecessor || null,
+      predecessorIndex: result.result.updatedPredecessor?.index ?? null,
+      predecessorNewNextKey: result.result.updatedPredecessor?.nextKey ?? null,
+      isInserted: true,
+    });
+    
+    // Set highlights for recently modified nodes (persist until new preview)
+    setRecentlyInsertedIndex(result.result.node.index);
+    if (result.result.updatedPredecessor) {
+      setRecentlyUpdatedIndex(result.result.updatedPredecessor.index);
+    } else {
+      setRecentlyUpdatedIndex(null);
+    }
+
+    return result.result;
+  }, [tree]);
+
+  const setPreview = useCallback((key: bigint) => {
+    if (!tree) return;
+
+    // Clear previous highlights when initiating a new preview
+    setRecentlyInsertedIndex(null);
+    setRecentlyUpdatedIndex(null);
+
+    const result = imtPreviewInsert(tree, key);
+    
+    if ('error' in result) {
+      setPreviewState(null);
+      return;
+    }
+
+    setPreviewState({
+      newNode: result.newNode,
+      predecessorNode: result.predecessorNode,
+      predecessorIndex: result.predecessorIndex,
+      predecessorNewNextKey: result.predecessorNewNextKey,
+    });
+  }, [tree]);
+
+  const clearPreview = useCallback(() => {
+    setPreviewState(null);
+  }, []);
+
+  const resetTree = useCallback(async () => {
+    await storage.clear();
+    setTree(null);
+    setPreviewState(null);
+    setRecentlyInsertedIndex(null);
+    setRecentlyUpdatedIndex(null);
+  }, []);
+
+  const getProof = useCallback((key: bigint): MerkleProof | { error: string } => {
+    if (!tree) {
+      return { error: 'Tree not initialized' };
+    }
+    return generateProof(tree, key);
+  }, [tree]);
+
+  const clearHighlights = useCallback(() => {
+    setRecentlyInsertedIndex(null);
+    setRecentlyUpdatedIndex(null);
+  }, []);
+
+  const value: IMTContextValue = {
+    tree,
+    isLoading,
+    preview,
+    recentlyInsertedIndex,
+    recentlyUpdatedIndex,
+    initializeTree,
+    insertNode,
+    setPreview,
+    clearPreview,
+    resetTree,
+    getProof,
+    clearHighlights,
+  };
+
+  return (
+    <IMTContext.Provider value={value}>
+      {children}
+    </IMTContext.Provider>
+  );
+}
+
+export function useIMT() {
+  const context = useContext(IMTContext);
+  if (!context) {
+    throw new Error('useIMT must be used within an IMTProvider');
+  }
+  return context;
+}

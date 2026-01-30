@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Tree link lines */
+.tree-link {
+  stroke: rgba(255, 255, 255, 0.5) !important;
+  stroke-width: 0.5px !important;
+  fill: none !important;
+}
+
+/* Hide react-d3-tree default node elements to prevent double rendering */
+/* Hide the default label group and its contents */
+.rd3t-label,
+.rd3t-label text,
+.rd3t-label__title,
+.rd3t-label__attributes {
+  display: none !important;
+}
+
+/* Hide default circles (direct children of rd3t-node, not inside custom-node) */
+.rd3t-node > circle {
+  display: none !important;
+}
+
+/* Hide any text that is a direct child of rd3t-node (default text) */
+.rd3t-node > text {
+  display: none !important;
+}
+
+/* Ensure our custom label is visible */
+.custom-node-label {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+}
+
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Node highlight animations */
+@keyframes pulse-green {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes pulse-orange {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(249, 115, 22, 0);
+  }
+}
+
+.node-new {
+  animation: pulse-green 1.5s ease-in-out 2;
+}
+
+.node-updated {
+  animation: pulse-orange 1.5s ease-in-out 2;
+}
+
+/* Input styling */
+input, select {
+  transition: border-color 0.2s;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Button hover effects */
+button {
+  transition: all 0.15s ease;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
