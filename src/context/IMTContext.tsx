@@ -1,11 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import type { IMTState, IMTNode, InsertPreview, InsertResult, MerkleProof, IMTExportData } from '@/lib/imt/types';
 import { exportTree, parseImportedNodes } from '@/lib/imt/types';
 import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot, getNodeByKey, buildMerkleLayers, validateTree } from '@/lib/imt/engine';
 import { generateProof } from '@/lib/imt/proof';
 import { storage } from '@/lib/storage/localStorage';
+import { useTreeSync } from '@/hooks/useTreeSync';
 
 interface PreviewState {
   newNode: IMTNode;
@@ -29,6 +30,7 @@ interface IMTContextValue {
   preview: PreviewState | null;
   recentlyInsertedIndex: number | null;
   recentlyUpdatedIndex: number | null;
+  recentlyReferencedIndex: number | null;
   membershipProof: ProofState | null;
   
   // Actions
@@ -53,7 +55,82 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const [preview, setPreviewState] = useState<PreviewState | null>(null);
   const [recentlyInsertedIndex, setRecentlyInsertedIndex] = useState<number | null>(null);
   const [recentlyUpdatedIndex, setRecentlyUpdatedIndex] = useState<number | null>(null);
+  const [recentlyReferencedIndex, setRecentlyReferencedIndex] = useState<number | null>(null);
   const [membershipProof, setMembershipProof] = useState<ProofState | null>(null);
+  
+  // Track if we're currently syncing from server to avoid save loops
+  const isSyncingRef = useRef(false);
+  // Track the last known tree size to detect new insertions from server
+  const lastSizeRef = useRef<number>(0);
+
+  // Handle real-time updates from the server via SSE
+  const handleServerSync = useCallback((data: IMTExportData & { root: string } | null) => {
+    if (!data) {
+      // Server has no tree, but we might have one locally - don't clear it
+      return;
+    }
+
+    try {
+      isSyncingRef.current = true;
+      
+      // Parse the incoming data
+      const { depth, nodes, nextIndex } = parseImportedNodes(data);
+      
+      // Rebuild Merkle layers
+      const layers = buildMerkleLayers(nodes, depth);
+      
+      const newTree: IMTState = {
+        depth,
+        nodes,
+        nextIndex,
+        layers,
+      };
+      
+      // Check if this is a new insertion (size increased)
+      const isNewInsertion = nextIndex > lastSizeRef.current && lastSizeRef.current > 0;
+      
+      setTree(newTree);
+      lastSizeRef.current = nextIndex;
+      
+      // If new insertion from server, highlight the relevant nodes
+      if (isNewInsertion && nodes.length > 0) {
+        // Find the most recently inserted node (highest index)
+        const latestNode = nodes.reduce((max, node) => 
+          node.index > max.index ? node : max, nodes[0]);
+        
+        // Find the predecessor (low nullifier) - the node whose nextKey points to the new node
+        const predecessorNode = nodes.find(n => n.nextKey === latestNode.key);
+        
+        // Find the referenced node - the node that the new node points to
+        const referencedNode = nodes.find(n => n.key === latestNode.nextKey);
+        
+        // Set highlights
+        setRecentlyInsertedIndex(latestNode.index);
+        setRecentlyUpdatedIndex(predecessorNode?.index ?? null);
+        setRecentlyReferencedIndex(referencedNode?.index ?? null);
+        
+        // Clear highlights after a delay
+        setTimeout(() => {
+          setRecentlyInsertedIndex(prev => 
+            prev === latestNode.index ? null : prev);
+          setRecentlyUpdatedIndex(prev => 
+            prev === predecessorNode?.index ? null : prev);
+          setRecentlyReferencedIndex(prev => 
+            prev === referencedNode?.index ? null : prev);
+        }, 2000);
+      }
+    } catch {
+      // Failed to parse server data, keep local state
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, []);
+
+  // Subscribe to real-time server updates
+  useTreeSync({
+    onSync: handleServerSync,
+    enabled: !isLoading,
+  });
 
   // Load tree from storage on mount
   useEffect(() => {
@@ -62,15 +139,16 @@ export function IMTProvider({ children }: { children: ReactNode }) {
       const stored = await storage.loadTree();
       if (stored) {
         setTree(stored);
+        lastSizeRef.current = stored.nextIndex;
       }
       setIsLoading(false);
     };
     loadTree();
   }, []);
 
-  // Save tree to storage whenever it changes
+  // Save tree to storage whenever it changes (but not during server sync)
   useEffect(() => {
-    if (tree && !isLoading) {
+    if (tree && !isLoading && !isSyncingRef.current) {
       storage.saveTree(tree);
     }
   }, [tree, isLoading]);
@@ -78,9 +156,11 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const initializeTree = useCallback((depth: number) => {
     const newTree = createEmptyTree(depth);
     setTree(newTree);
+    lastSizeRef.current = 0;
     setPreviewState(null);
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setRecentlyReferencedIndex(null);
     setMembershipProof(null);
   }, []);
 
@@ -96,6 +176,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     }
 
     setTree(result.state);
+    lastSizeRef.current = result.state.nextIndex;
     
     // Clear membership proof when inserting
     setMembershipProof(null);
@@ -126,6 +207,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     // Clear previous highlights and membership proof when initiating a new preview
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setRecentlyReferencedIndex(null);
     setMembershipProof(null);
 
     const result = imtPreviewInsert(tree, key);
@@ -150,9 +232,11 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const resetTree = useCallback(async () => {
     await storage.clear();
     setTree(null);
+    lastSizeRef.current = 0;
     setPreviewState(null);
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setRecentlyReferencedIndex(null);
     setMembershipProof(null);
   }, []);
 
@@ -166,6 +250,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
   const clearHighlights = useCallback(() => {
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setRecentlyReferencedIndex(null);
   }, []);
 
   const generateMembershipProof = useCallback((key: bigint): { error: string } | void => {
@@ -177,6 +262,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     setPreviewState(null);
     setRecentlyInsertedIndex(null);
     setRecentlyUpdatedIndex(null);
+    setRecentlyReferencedIndex(null);
 
     const result = generateProof(tree, key);
     
@@ -229,9 +315,11 @@ export function IMTProvider({ children }: { children: ReactNode }) {
       }
       
       setTree(newTree);
+      lastSizeRef.current = nextIndex;
       setPreviewState(null);
       setRecentlyInsertedIndex(null);
       setRecentlyUpdatedIndex(null);
+      setRecentlyReferencedIndex(null);
       setMembershipProof(null);
     } catch (err) {
       return { error: `Failed to import tree: ${err instanceof Error ? err.message : 'Unknown error'}` };
@@ -244,6 +332,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     preview,
     recentlyInsertedIndex,
     recentlyUpdatedIndex,
+    recentlyReferencedIndex,
     membershipProof,
     initializeTree,
     insertNode,

@@ -483,7 +483,7 @@ function SelectedNodePanel({ selectedNode, tree, onClose }: SelectedNodePanelPro
 }
 
 export function TreeVisualization() {
-  const { tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex, clearPreview, membershipProof, clearMembershipProof } = useIMT();
+  const { tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex, recentlyReferencedIndex, clearPreview, membershipProof, clearMembershipProof } = useIMT();
   const [selectedLeafNode, setSelectedLeafNode] = useState<IMTNode | null>(null);
   const [selectedInternalNode, setSelectedInternalNode] = useState<{
     hash: string;
@@ -521,10 +521,11 @@ export function TreeVisualization() {
   }, [containerMounted]);
 
   // Generate a key to force Tree re-initialization when tree structure or container changes
+  // Only include depth (not nodes.length) - adding nodes shouldn't reset zoom/pan
   const treeKey = useMemo(() => {
     if (!tree || !containerSize) return 'no-tree';
-    return `tree-${tree.depth}-${tree.nodes.length}-${containerSize.width}-${containerSize.height}`;
-  }, [tree, containerSize]);
+    return `tree-${tree.depth}-${containerSize.width}-${containerSize.height}`;
+  }, [tree?.depth, containerSize]);
 
   // Calculate zoom and translate to fit tree in viewport
   const { zoom, translate } = useMemo(() => {
@@ -607,7 +608,7 @@ export function TreeVisualization() {
         const isPreviewLeaf = preview?.newNode.index === nodeIndex;
         const isNew = recentlyInsertedIndex === nodeIndex;
         const isUpdated = recentlyUpdatedIndex === nodeIndex || preview?.predecessorIndex === nodeIndex;
-        const isReference = nextKeyNodeIndex === nodeIndex;
+        const isReference = nextKeyNodeIndex === nodeIndex || recentlyReferencedIndex === nodeIndex;
 
         if (isEmpty && !isPreviewLeaf) {
           return {
@@ -665,7 +666,7 @@ export function TreeVisualization() {
 
     // Start from root (last layer, index 0)
     return buildNode(depth, 0);
-  }, [tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex]);
+  }, [tree, preview, recentlyInsertedIndex, recentlyUpdatedIndex, recentlyReferencedIndex]);
 
   // Custom node renderer - small compact rectangles
   const renderNode = useCallback(({ nodeDatum }: CustomNodeElementProps) => {
