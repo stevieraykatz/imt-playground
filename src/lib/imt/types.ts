@@ -93,12 +93,12 @@ export interface InclusionProof {
  */
 export interface ExclusionProof {
   type: 'exclusion';
-  /** The "low" node where lowNode.key < queryKey < lowNode.nextKey */
-  lowNode: IMTNode;
-  /** Sibling hashes for the low node's Merkle path */
-  lowNodeSiblings: string[];
-  /** Path indices for the low node */
-  lowNodePathIndices: number[];
+  /** The "low" node where node.key < queryKey < node.nextKey */
+  node: IMTNode;
+  /** Sibling hashes along the Merkle path */
+  siblings: string[];
+  /** Path indices (0 = left, 1 = right) */
+  pathIndices: number[];
 }
 
 export type MerkleProof = InclusionProof | ExclusionProof;
@@ -164,4 +164,129 @@ export function deserializeState(state: SerializedIMTState): IMTState {
     nextIndex: state.nextIndex,
     layers: state.layers,
   };
+}
+
+/**
+ * Compact export format for JSON files
+ */
+export interface IMTExportNode {
+  key: string;
+  nextKey: string;
+}
+
+export interface IMTExportData {
+  depth: number;
+  nodes: IMTExportNode[];
+  nextIndex: number;
+}
+
+/**
+ * Export tree state to compact JSON format
+ */
+export function exportTree(state: IMTState): IMTExportData {
+  // Nodes must be sorted by index for export (index is implicit from array position)
+  const sortedNodes = [...state.nodes].sort((a, b) => a.index - b.index);
+  
+  return {
+    depth: state.depth,
+    nodes: sortedNodes.map(node => ({
+      key: '0x' + node.key.toString(16),
+      nextKey: '0x' + node.nextKey.toString(16),
+    })),
+    nextIndex: state.nextIndex,
+  };
+}
+
+/**
+ * Parse exported JSON back to IMTNode array
+ */
+export function parseImportedNodes(data: IMTExportData): { depth: number; nodes: IMTNode[]; nextIndex: number } {
+  return {
+    depth: data.depth,
+    nodes: data.nodes.map((node, index) => ({
+      key: BigInt(node.key),
+      index,
+      nextKey: BigInt(node.nextKey),
+    })),
+    nextIndex: data.nextIndex,
+  };
+}
+
+/**
+ * Serialized proof node for JSON export
+ */
+export interface SerializedProofNode {
+  key: string;
+  index: number;
+  nextKey: string;
+}
+
+/**
+ * Serialized inclusion proof for JSON export
+ */
+export interface SerializedInclusionProof {
+  type: 'inclusion';
+  depth: number;
+  size: number;
+  root: string;
+  queryKey: string;
+  node: SerializedProofNode;
+  siblings: string[];
+  pathIndices: number[];
+}
+
+/**
+ * Serialized exclusion proof for JSON export
+ */
+export interface SerializedExclusionProof {
+  type: 'exclusion';
+  depth: number;
+  size: number;
+  root: string;
+  queryKey: string;
+  node: SerializedProofNode;
+  siblings: string[];
+  pathIndices: number[];
+}
+
+export type SerializedMerkleProof = SerializedInclusionProof | SerializedExclusionProof;
+
+/**
+ * Export a Merkle proof to JSON-serializable format.
+ * Siblings are ordered from root to leaf (most significant first, descending depth).
+ */
+export function exportProof(queryKey: bigint, proof: MerkleProof, root: string, depth: number, size: number): SerializedMerkleProof {
+  const formatKey = (k: bigint): string => '0x' + k.toString(16);
+  
+  if (proof.type === 'inclusion') {
+    return {
+      type: 'inclusion',
+      depth,
+      size,
+      root,
+      queryKey: formatKey(queryKey),
+      node: {
+        key: formatKey(proof.node.key),
+        index: proof.node.index,
+        nextKey: formatKey(proof.node.nextKey),
+      },
+      siblings: [...proof.siblings].reverse(),
+      pathIndices: [...proof.pathIndices].reverse(),
+    };
+  } else {
+    return {
+      type: 'exclusion',
+      depth,
+      size,
+      root,
+      queryKey: formatKey(queryKey),
+      node: {
+        key: formatKey(proof.node.key),
+        index: proof.node.index,
+        nextKey: formatKey(proof.node.nextKey),
+      },
+      siblings: [...proof.siblings].reverse(),
+      pathIndices: [...proof.pathIndices].reverse(),
+    };
+  }
 }

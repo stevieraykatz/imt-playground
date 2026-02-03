@@ -9,7 +9,7 @@ import { CopyButton } from './CopyButton';
 import type { IMTNode, IMTState } from '@/lib/imt/types';
 import { MAX_KEY } from '@/lib/imt/types';
 import type { RawNodeDatum, CustomNodeElementProps } from 'react-d3-tree';
-import { getNodeByKey } from '@/lib/imt/engine';
+import { getNodeByKey, getRoot, getRawRoot } from '@/lib/imt/engine';
 import { hashNode } from '@/lib/imt/hash';
 
 // Dynamically import react-d3-tree to avoid SSR issues
@@ -848,13 +848,38 @@ export function TreeVisualization() {
       </div>
 
       {/* Root hash display */}
-      <div className="absolute top-4 left-4 bg-zinc-900/90 border border-zinc-800 rounded p-3 text-xs z-10">
-        <div className="text-zinc-500 mb-1">Root Hash</div>
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono text-zinc-300 truncate max-w-[200px]" title={tree.layers[tree.layers.length - 1]?.[0]}>
-            {tree.layers[tree.layers.length - 1]?.[0]?.slice(0, 20)}...
-          </span>
-          <CopyButton value={tree.layers[tree.layers.length - 1]?.[0] || ''} />
+      <div className="absolute top-4 left-4 bg-zinc-900/90 border border-zinc-800 rounded p-3 text-xs z-10 space-y-3">
+        {/* Size-Committed Root (canonical for verification) */}
+        <div>
+          <div className="text-zinc-500 mb-1 flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            Commitment Root
+            <span className="text-zinc-600 text-[10px]">(canonical)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-green-300 truncate max-w-[200px]" title={getRoot(tree)}>
+              {getRoot(tree)?.slice(0, 20)}...
+            </span>
+            <CopyButton value={getRoot(tree)} />
+          </div>
+          <div className="text-[10px] text-zinc-600 mt-1">
+            hash(treeRoot || size={tree.nextIndex})
+          </div>
+        </div>
+        
+        {/* Raw Tree Root */}
+        <div className="pt-2 border-t border-zinc-800">
+          <div className="text-zinc-500 mb-1 flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
+            Tree Root
+            <span className="text-zinc-600 text-[10px]">(internal)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-zinc-400 truncate max-w-[200px]" title={getRawRoot(tree)}>
+              {getRawRoot(tree)?.slice(0, 20)}...
+            </span>
+            <CopyButton value={getRawRoot(tree)} />
+          </div>
         </div>
       </div>
 

@@ -9,7 +9,7 @@
 
 import type { IMTNode, IMTState, InsertPreview, InsertResult } from './types';
 import { ZERO_KEY, MAX_KEY } from './types';
-import { hashNode, hashPair, computeZeroHashes } from './hash';
+import { hashNode, hashPair, computeZeroHashes, hashRootWithSize } from './hash';
 
 /**
  * Create a new empty IMT with the specified depth.
@@ -176,17 +176,23 @@ export function insert(state: IMTState, key: bigint): { state: IMTState; result:
   // Rebuild Merkle tree
   const layers = buildMerkleLayers(newNodes, state.depth);
   
+  const newNextIndex = state.nextIndex + 1;
+  
   const newState: IMTState = {
     depth: state.depth,
     nodes: newNodes,
-    nextIndex: state.nextIndex + 1,
+    nextIndex: newNextIndex,
     layers,
   };
+  
+  // Compute size-committed root: hash(rawRoot || size)
+  const rawRoot = layers[layers.length - 1][0];
+  const committedRoot = hashRootWithSize(rawRoot, newNextIndex);
   
   const result: InsertResult = {
     node: newNode,
     updatedPredecessor: predecessorNode ? { ...predecessorNode, nextKey: key } : null,
-    newRoot: layers[layers.length - 1][0],
+    newRoot: committedRoot,
   };
   
   return { state: newState, result };
@@ -233,13 +239,27 @@ export function buildMerkleLayers(nodes: IMTNode[], depth: number): string[][] {
 }
 
 /**
- * Get the current root hash
+ * Get the raw Merkle root (without size commitment).
+ * This is the root of the internal Merkle tree structure.
+ * Used internally for tree traversal and proof generation.
  */
-export function getRoot(state: IMTState): string {
+export function getRawRoot(state: IMTState): string {
   if (state.layers.length === 0) {
     return computeZeroHashes(state.depth)[state.depth];
   }
   return state.layers[state.layers.length - 1][0];
+}
+
+/**
+ * Get the current root hash with size commitment.
+ * 
+ * This is the canonical root that should be used for verification.
+ * It includes the tree size (nextIndex) hashed into the root to prevent
+ * tree size manipulation attacks. See hashRootWithSize for details.
+ */
+export function getRoot(state: IMTState): string {
+  const rawRoot = getRawRoot(state);
+  return hashRootWithSize(rawRoot, state.nextIndex);
 }
 
 /**

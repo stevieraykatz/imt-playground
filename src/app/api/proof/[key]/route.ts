@@ -20,9 +20,9 @@ import { serializeNode } from '@/lib/imt/types';
  * Response (exclusion):
  * {
  *   type: "exclusion",
- *   lowNode: SerializedIMTNode,
- *   lowNodeSiblings: string[],
- *   lowNodePathIndices: number[]
+ *   node: SerializedIMTNode,
+ *   siblings: string[],
+ *   pathIndices: number[]
  * }
  */
 export async function GET(
@@ -83,9 +83,9 @@ export async function GET(
     } else {
       return NextResponse.json({
         type: 'exclusion',
-        lowNode: serializeNode(proof.lowNode),
-        lowNodeSiblings: proof.lowNodeSiblings,
-        lowNodePathIndices: proof.lowNodePathIndices,
+        node: serializeNode(proof.node),
+        siblings: proof.siblings,
+        pathIndices: proof.pathIndices,
       });
     }
     

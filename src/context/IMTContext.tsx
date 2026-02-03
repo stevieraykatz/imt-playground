@@ -1,8 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import type { IMTState, IMTNode, InsertPreview, InsertResult, MerkleProof } from '@/lib/imt/types';
-import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot, getNodeByKey } from '@/lib/imt/engine';
+import type { IMTState, IMTNode, InsertPreview, InsertResult, MerkleProof, IMTExportData } from '@/lib/imt/types';
+import { exportTree, parseImportedNodes } from '@/lib/imt/types';
+import { createEmptyTree, insert as imtInsert, previewInsert as imtPreviewInsert, getRoot, getNodeByKey, buildMerkleLayers, validateTree } from '@/lib/imt/engine';
 import { generateProof } from '@/lib/imt/proof';
 import { storage } from '@/lib/storage/localStorage';
 
@@ -40,6 +41,8 @@ interface IMTContextValue {
   clearHighlights: () => void;
   generateMembershipProof: (key: bigint) => { error: string } | void;
   clearMembershipProof: () => void;
+  exportTreeData: () => IMTExportData | null;
+  importTreeData: (data: IMTExportData) => { error: string } | void;
 }
 
 const IMTContext = createContext<IMTContextValue | null>(null);
@@ -185,7 +188,7 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     // For exclusion proofs, find the next key node (what the low nullifier points to)
     let nextKeyNode: IMTNode | null = null;
     if (result.type === 'exclusion') {
-      nextKeyNode = getNodeByKey(tree, result.lowNode.nextKey);
+      nextKeyNode = getNodeByKey(tree, result.node.nextKey);
     }
 
     setMembershipProof({
@@ -197,6 +200,42 @@ export function IMTProvider({ children }: { children: ReactNode }) {
 
   const clearMembershipProof = useCallback(() => {
     setMembershipProof(null);
+  }, []);
+
+  const exportTreeData = useCallback((): IMTExportData | null => {
+    if (!tree) return null;
+    return exportTree(tree);
+  }, [tree]);
+
+  const importTreeData = useCallback((data: IMTExportData): { error: string } | void => {
+    try {
+      // Parse the imported data
+      const { depth, nodes, nextIndex } = parseImportedNodes(data);
+      
+      // Rebuild Merkle layers
+      const layers = buildMerkleLayers(nodes, depth);
+      
+      const newTree: IMTState = {
+        depth,
+        nodes,
+        nextIndex,
+        layers,
+      };
+      
+      // Validate the tree
+      const validation = validateTree(newTree);
+      if (!validation.valid) {
+        return { error: `Invalid tree: ${validation.errors.join(', ')}` };
+      }
+      
+      setTree(newTree);
+      setPreviewState(null);
+      setRecentlyInsertedIndex(null);
+      setRecentlyUpdatedIndex(null);
+      setMembershipProof(null);
+    } catch (err) {
+      return { error: `Failed to import tree: ${err instanceof Error ? err.message : 'Unknown error'}` };
+    }
   }, []);
 
   const value: IMTContextValue = {
@@ -215,6 +254,8 @@ export function IMTProvider({ children }: { children: ReactNode }) {
     clearHighlights,
     generateMembershipProof,
     clearMembershipProof,
+    exportTreeData,
+    importTreeData,
   };
 
   return (

@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import type { IMTNode, IMTState, MerkleProof } from '@/lib/imt/types';
-import { MAX_KEY } from '@/lib/imt/types';
+import { MAX_KEY, exportProof } from '@/lib/imt/types';
 import { CopyButton } from './CopyButton';
 import { hashNode } from '@/lib/imt/hash';
+import { getRoot, getRawRoot } from '@/lib/imt/engine';
 
 interface ProofPanelProps {
   queryKey: bigint;
@@ -47,11 +48,28 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
   const [activeTab, setActiveTab] = useState<'visualization' | 'proof'>('visualization');
   
   const isInclusion = proof.type === 'inclusion';
+
+  const handleExportProof = () => {
+    const root = getRoot(tree);
+    const data = exportProof(queryKey, proof, root, tree.depth, tree.nodes.length);
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    const keyHex = queryKey.toString(16).slice(0, 8);
+    a.download = `imt-proof-${isInclusion ? 'inclusion' : 'exclusion'}-0x${keyHex}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
   
   // Get the appropriate node and proof data based on proof type
-  const proofNode = isInclusion ? proof.node : proof.lowNode;
-  const siblings = isInclusion ? proof.siblings : proof.lowNodeSiblings;
-  const pathIndices = isInclusion ? proof.pathIndices : proof.lowNodePathIndices;
+  const proofNode = proof.node;
+  const siblings = proof.siblings;
+  const pathIndices = proof.pathIndices;
   const nodeHash = hashNode(proofNode);
   
   // For inclusion proofs, find the low nullifier and next key node
@@ -114,15 +132,29 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
             {isInclusion ? 'Inclusion Proof' : 'Exclusion Proof'}
           </span>
         </div>
-        <button
-          onClick={onClose}
-          className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
-          title="Close"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportProof}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 border border-zinc-600 rounded hover:bg-zinc-700 transition-colors text-xs text-zinc-300"
+            title="Export proof to JSON"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Export Proof
+          </button>
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
+            title="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       {activeTab === 'visualization' ? (
@@ -264,7 +296,7 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                 <div className="flex-shrink-0 bg-zinc-900 border-2 border-orange-500/60 rounded-xl min-w-[240px]">
                   <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-zinc-800">
                     <span className="text-sm font-semibold text-zinc-200">
-                      Low Nullifier [{proof.lowNode.index}]
+                      Low Nullifier [{proof.node.index}]
                     </span>
                     <span className="px-2 py-0.5 text-xs font-medium border rounded-md bg-orange-900/50 text-orange-400 border-orange-600/30">
                       membership proven
@@ -273,14 +305,14 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                   <div className="p-4 space-y-2 text-sm font-mono">
                     <div className="flex justify-between gap-4">
                       <span className="text-zinc-500 font-medium">key</span>
-                      <span className="text-orange-300 truncate" title={formatHex(proof.lowNode.key)}>
-                        {truncateHex(formatHex(proof.lowNode.key), 14)}
+                      <span className="text-orange-300 truncate" title={formatHex(proof.node.key)}>
+                        {truncateHex(formatHex(proof.node.key), 14)}
                       </span>
                     </div>
                     <div className="flex justify-between gap-4">
                       <span className="text-zinc-500 font-medium">nextKey</span>
-                      <span className="text-zinc-200 truncate" title={formatHex(proof.lowNode.nextKey)}>
-                        {truncateHex(formatHex(proof.lowNode.nextKey), 14)}
+                      <span className="text-zinc-200 truncate" title={formatHex(proof.node.nextKey)}>
+                        {truncateHex(formatHex(proof.node.nextKey), 14)}
                       </span>
                     </div>
                   </div>
@@ -321,7 +353,7 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                   {/* Range indicator */}
                   <div className="px-4 pb-3 pt-1 border-t border-zinc-800">
                     <div className="text-[10px] text-zinc-500 text-center">
-                      lowNode.key &lt; <span className="text-purple-400">query</span> &lt; lowNode.nextKey
+                      node.key &lt; <span className="text-purple-400">query</span> &lt; node.nextKey
                     </div>
                   </div>
                 </div>
@@ -387,6 +419,56 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                       ? 'The inclusion proof demonstrates that this node IS a member of the tree by providing the Merkle path from the leaf to the root.'
                       : 'The non-membership proof is proven by demonstrating that the low nullifier IS a member of the tree, and that the query key falls between its key and nextKey.'
                     }
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Root and Size Information */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                  Commitment Root
+                </h4>
+                <div className="font-mono text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="text-green-300 truncate" title={getRoot(tree)}>
+                      {getRoot(tree).slice(0, 18)}...
+                    </span>
+                    <CopyButton value={getRoot(tree)} />
+                  </div>
+                  <p className="text-zinc-500 mt-1 text-[10px]">
+                    hash(treeRoot || size)
+                  </p>
+                </div>
+              </div>
+              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-zinc-500 rounded-full"></span>
+                  Tree Root
+                </h4>
+                <div className="font-mono text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="text-zinc-400 truncate" title={getRawRoot(tree)}>
+                      {getRawRoot(tree).slice(0, 18)}...
+                    </span>
+                    <CopyButton value={getRawRoot(tree)} />
+                  </div>
+                  <p className="text-zinc-500 mt-1 text-[10px]">
+                    Internal Merkle root
+                  </p>
+                </div>
+              </div>
+              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  Tree Size
+                </h4>
+                <div className="font-mono text-xs">
+                  <span className="text-blue-300 text-lg">{tree.nextIndex}</span>
+                  <p className="text-zinc-500 mt-1 text-[10px]">
+                    Elements in tree (committed)
                   </p>
                 </div>
               </div>
@@ -469,7 +551,7 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                 Sibling Hashes (Merkle Path)
                 <span className="text-xs text-zinc-500 font-normal">
-                  ({siblings.length} levels)
+                  ({siblings.length} levels, leaf → root order)
                 </span>
               </h4>
               <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -489,8 +571,8 @@ export function ProofPanel({ queryKey, proof, nextKeyNode, tree, onClose }: Proo
                 ))}
               </div>
               <p className="text-[10px] text-zinc-500 mt-2">
-                Each sibling hash is combined with the current hash at that level to compute the parent hash.
-                The path index indicates whether this node is the Left (L) or Right (R) sibling.
+                Siblings are ordered leaf-to-root (L0 is at leaf level). When exported, order is reversed to root-to-leaf.
+                Path index shows if the proven node is Left (L) or Right (R) child at each level.
               </p>
             </div>
           </div>

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useIMT } from '@/context/IMTContext';
+import type { IMTExportData } from '@/lib/imt/types';
 
 export function ControlPanel() {
   const { 
@@ -16,7 +17,11 @@ export function ControlPanel() {
     resetTree,
     generateMembershipProof,
     clearMembershipProof,
+    exportTreeData,
+    importTreeData,
   } = useIMT();
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [depth, setDepth] = useState(4);
   const [keyInput, setKeyInput] = useState('');
@@ -24,6 +29,7 @@ export function ControlPanel() {
   const [error, setError] = useState<string | null>(null);
   const [proofError, setProofError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Sync depth state with tree's actual depth when loaded from storage
   useEffect(() => {
@@ -113,6 +119,54 @@ export function ControlPanel() {
     }
   };
 
+  const handleExport = () => {
+    const data = exportTreeData();
+    if (!data) return;
+    
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `imt-tree-depth${data.depth}-${data.nodes.length}nodes.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImportError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as IMTExportData;
+      
+      // Basic validation of required fields
+      if (typeof data.depth !== 'number' || !Array.isArray(data.nodes) || typeof data.nextIndex !== 'number') {
+        setImportError('Invalid file format: missing required fields');
+        return;
+      }
+      
+      const result = importTreeData(data);
+      if (result && 'error' in result) {
+        setImportError(result.error);
+      }
+    } catch (err) {
+      setImportError(`Failed to parse file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+    
+    // Reset file input so the same file can be imported again
+    e.target.value = '';
+  };
+
   if (isLoading) {
     return (
       <div className="w-72 border-r border-zinc-800 p-4">
@@ -124,6 +178,15 @@ export function ControlPanel() {
   return (
     <div className="w-72 border-r border-zinc-800 p-4 flex flex-col h-full">
       <h2 className="text-lg font-semibold mb-4">IMT Playground</h2>
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleFileChange}
+        className="hidden"
+      />
 
       {/* Tree initialization */}
       {!tree ? (
@@ -147,6 +210,28 @@ export function ControlPanel() {
           >
             Initialize Tree
           </button>
+          
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-zinc-700"></div>
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-zinc-950 px-2 text-zinc-500">or</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleImportClick}
+            className="w-full bg-zinc-800 border border-zinc-600 py-2 rounded hover:bg-zinc-700 transition-colors"
+          >
+            Import Tree from JSON
+          </button>
+          
+          {importError && (
+            <div className="p-2 bg-red-900/30 border border-red-600/50 rounded text-sm text-red-400">
+              {importError}
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -267,6 +352,30 @@ export function ControlPanel() {
                 >
                   Clear Proof
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* Import/Export section */}
+          <div className="mt-6 pt-4 border-t border-zinc-800">
+            <h3 className="text-sm font-medium text-zinc-300 mb-3">Import / Export Tree</h3>
+            <div className="space-y-2">
+              <button
+                onClick={handleExport}
+                className="w-full bg-zinc-800 border border-zinc-600 py-2 rounded hover:bg-zinc-700 transition-colors text-sm"
+              >
+                Export Tree to JSON
+              </button>
+              <button
+                onClick={handleImportClick}
+                className="w-full bg-zinc-800 border border-zinc-600 py-2 rounded hover:bg-zinc-700 transition-colors text-sm"
+              >
+                Import Tree from JSON
+              </button>
+              {importError && (
+                <div className="p-2 bg-red-900/30 border border-red-600/50 rounded text-sm text-red-400">
+                  {importError}
+                </div>
               )}
             </div>
           </div>

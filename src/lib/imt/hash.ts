@@ -84,3 +84,30 @@ export function keccak256(hexData: string): string {
   const hash = keccak_256(data);
   return '0x' + bytesToHex(hash);
 }
+
+/**
+ * Hash the Merkle root with the tree size to create a size-committed root.
+ * 
+ * This is a critical security measure that binds the root to a specific tree state.
+ * Without size commitment, an attacker could construct valid proofs for "virtual" 
+ * empty leaves that were never actually inserted, or claim the tree has a different 
+ * number of elements than it really does.
+ * 
+ * With size commitment, the root uniquely identifies both the tree's contents AND 
+ * its size. A proof is only valid for the exact tree state (number of insertions) 
+ * it was generated from.
+ * 
+ * Format: keccak256(merkleRoot || size)
+ * where size is encoded as a uint256 (32 bytes, big-endian)
+ */
+export function hashRootWithSize(merkleRoot: string, size: number): string {
+  const rootBytes = hexToBytes(merkleRoot.slice(2)); // Remove 0x prefix
+  const sizeBytes = bigintToBytes32(BigInt(size));
+  
+  const buffer = new Uint8Array(64); // 32 bytes root + 32 bytes size
+  buffer.set(rootBytes, 0);
+  buffer.set(sizeBytes, 32);
+  
+  const hash = keccak_256(buffer);
+  return '0x' + bytesToHex(hash);
+}

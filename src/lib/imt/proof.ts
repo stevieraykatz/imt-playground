@@ -98,23 +98,28 @@ export function generateExclusionProof(state: IMTState, key: bigint): ExclusionP
   
   return {
     type: 'exclusion',
-    lowNode,
-    lowNodeSiblings: siblings,
-    lowNodePathIndices: pathIndices,
+    node: lowNode,
+    siblings,
+    pathIndices,
   };
 }
 
 /**
  * Verify an inclusion proof
+ * 
+ * @param proof - The inclusion proof to verify
+ * @param expectedRoot - The expected size-committed root
+ * @param size - The tree size (number of elements) used in the root commitment
  */
 export function verifyInclusionProof(
   proof: InclusionProof,
-  expectedRoot: string
+  expectedRoot: string,
+  size: number
 ): boolean {
   const { node, siblings, pathIndices } = proof;
   
-  // Compute the root from the leaf
-  const { hashNode, hashPair } = require('./hash');
+  // Compute the raw Merkle root from the leaf
+  const { hashNode, hashPair, hashRootWithSize } = require('./hash');
   let currentHash = hashNode(node);
   
   for (let i = 0; i < siblings.length; i++) {
@@ -128,31 +133,39 @@ export function verifyInclusionProof(
     }
   }
   
-  return currentHash === expectedRoot;
+  // Compute the size-committed root and compare
+  const committedRoot = hashRootWithSize(currentHash, size);
+  return committedRoot === expectedRoot;
 }
 
 /**
  * Verify an exclusion proof
+ * 
+ * @param proof - The exclusion proof to verify
+ * @param queryKey - The key being proven absent from the tree
+ * @param expectedRoot - The expected size-committed root
+ * @param size - The tree size (number of elements) used in the root commitment
  */
 export function verifyExclusionProof(
   proof: ExclusionProof,
   queryKey: bigint,
-  expectedRoot: string
+  expectedRoot: string,
+  size: number
 ): boolean {
-  const { lowNode, lowNodeSiblings, lowNodePathIndices } = proof;
+  const { node, siblings, pathIndices } = proof;
   
-  // First check the linked list property: lowNode.key < queryKey < lowNode.nextKey
-  if (!(lowNode.key < queryKey && queryKey < lowNode.nextKey)) {
+  // First check the linked list property: node.key < queryKey < node.nextKey
+  if (!(node.key < queryKey && queryKey < node.nextKey)) {
     return false;
   }
   
   // Then verify the Merkle proof for the low node
-  const { hashNode, hashPair } = require('./hash');
-  let currentHash = hashNode(lowNode);
+  const { hashNode, hashPair, hashRootWithSize } = require('./hash');
+  let currentHash = hashNode(node);
   
-  for (let i = 0; i < lowNodeSiblings.length; i++) {
-    const sibling = lowNodeSiblings[i];
-    const isRight = lowNodePathIndices[i] === 1;
+  for (let i = 0; i < siblings.length; i++) {
+    const sibling = siblings[i];
+    const isRight = pathIndices[i] === 1;
     
     if (isRight) {
       currentHash = hashPair(sibling, currentHash);
@@ -161,5 +174,7 @@ export function verifyExclusionProof(
     }
   }
   
-  return currentHash === expectedRoot;
+  // Compute the size-committed root and compare
+  const committedRoot = hashRootWithSize(currentHash, size);
+  return committedRoot === expectedRoot;
 }
