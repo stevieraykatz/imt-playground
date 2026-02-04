@@ -1,0 +1,45 @@
+{
+  "name": "@stevieraykatz/imt-engine",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Indexed Merkle Tree engine - a pure TypeScript implementation with HTTP API",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "imt-engine": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js serve",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "keywords": [
+    "merkle-tree",
+    "indexed-merkle-tree",
+    "imt",
+    "cryptography",
+    "zero-knowledge",
+    "api",
+    "server"
+  ],
+  "license": "MIT"
+}

@@ -1,18 +1,13 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
-    "lib": ["esnext"],
+    "target": "ES2020",
+    "lib": ["ES2020"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "declaration": true,
     "declarationMap": true
-  },
-  "references": [
-    { "path": "./packages/imt-engine" },
-    { "path": "./apps/playground" }
-  ]
+  }
 }

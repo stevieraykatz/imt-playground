@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/apps/playground/.next/
 
 # production
 /build
