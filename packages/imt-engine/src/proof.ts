@@ -87,16 +87,15 @@ export function generateExclusionProof(state: IMTState, key: bigint): ExclusionP
     return { error: `Key ${key} exists in tree - cannot generate exclusion proof` };
   }
   
-  // Find the predecessor (low node)
+  // Find the predecessor (low node) - always exists due to sentinel at key 0
   const lowNode = findPredecessor(state, key);
-  
+
   if (!lowNode) {
     return { error: `Could not find low node for key ${key}` };
   }
-  
-  // Generate Merkle proof for the low node
+
   const { siblings, pathIndices } = getMerklePath(state, lowNode.index);
-  
+
   return {
     type: 'exclusion',
     node: lowNode,
@@ -153,8 +152,8 @@ export function verifyExclusionProof(
   size: number
 ): boolean {
   const { node, siblings, pathIndices } = proof;
-  
-  // First check the linked list property: node.key < queryKey < node.nextKey
+
+  // Check linked list property: node.key < queryKey < node.nextKey
   if (!(node.key < queryKey && queryKey < node.nextKey)) {
     return false;
   }

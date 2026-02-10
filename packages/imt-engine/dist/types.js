@@ -74,16 +74,35 @@ export function exportTree(state) {
     };
 }
 /**
- * Parse exported JSON back to IMTNode array
+ * Parse exported JSON back to IMTNode array.
+ * Ensures the sentinel (key 0) is at index 0 - prepends it if importing legacy data.
  */
 export function parseImportedNodes(data) {
+    const parsed = data.nodes.map((node, index) => ({
+        key: BigInt(node.key),
+        index,
+        nextKey: BigInt(node.nextKey),
+    }));
+    // Ensure sentinel at index 0 (key 0) for trees created before sentinel was added
+    if (parsed.length === 0 || parsed[0].key !== ZERO_KEY) {
+        const minKey = parsed.length > 0
+            ? parsed.reduce((min, n) => (n.key < min ? n.key : min), parsed[0].key)
+            : MAX_KEY;
+        const sentinel = {
+            key: ZERO_KEY,
+            index: 0,
+            nextKey: minKey,
+        };
+        const shifted = parsed.map((n, i) => ({ ...n, index: i + 1 }));
+        return {
+            depth: data.depth,
+            nodes: [sentinel, ...shifted],
+            nextIndex: parsed.length + 1,
+        };
+    }
     return {
         depth: data.depth,
-        nodes: data.nodes.map((node, index) => ({
-            key: BigInt(node.key),
-            index,
-            nextKey: BigInt(node.nextKey),
-        })),
+        nodes: parsed,
         nextIndex: data.nextIndex,
     };
 }

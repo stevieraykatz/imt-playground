@@ -9,15 +9,13 @@
 import type { IMTNode, IMTState, InsertPreview, InsertResult } from './types.js';
 /**
  * Create a new empty IMT with the specified depth.
- * Starts with no nodes - index 0 is available for real data.
+ * Always includes a sentinel node at index 0 (key 0) so no query key is ever lower than the lowest node.
  */
 export declare function createEmptyTree(depth: number): IMTState;
 /**
  * Find the predecessor node for a given key.
  * Returns the node where: predecessor.key < key < predecessor.nextKey
- * Returns null if:
- * - Tree is empty (first insertion)
- * - Key is smaller than all existing keys (new node becomes head)
+ * With the sentinel (key 0) always present, a predecessor exists for any key in (0, MAX_KEY).
  */
 export declare function findPredecessor(state: IMTState, key: bigint): IMTNode | null;
 /**

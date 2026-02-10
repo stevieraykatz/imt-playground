@@ -9,26 +9,32 @@
 import { ZERO_KEY, MAX_KEY } from './types.js';
 import { hashNode, hashPair, computeZeroHashes, hashRootWithSize } from './hash.js';
 /**
+ * Sentinel node at index 0 with key 0.
+ * Guarantees every query key has a predecessor (0 < key < MAX_KEY).
+ */
+const SENTINEL_NODE = {
+    key: ZERO_KEY,
+    index: 0,
+    nextKey: MAX_KEY,
+};
+/**
  * Create a new empty IMT with the specified depth.
- * Starts with no nodes - index 0 is available for real data.
+ * Always includes a sentinel node at index 0 (key 0) so no query key is ever lower than the lowest node.
  */
 export function createEmptyTree(depth) {
-    const nodes = [];
-    // Build initial Merkle tree (all zeros)
+    const nodes = [SENTINEL_NODE];
     const layers = buildMerkleLayers(nodes, depth);
     return {
         depth,
         nodes,
-        nextIndex: 0, // First insertion goes to index 0
+        nextIndex: 1, // First real insertion goes to index 1
         layers,
     };
 }
 /**
  * Find the predecessor node for a given key.
  * Returns the node where: predecessor.key < key < predecessor.nextKey
- * Returns null if:
- * - Tree is empty (first insertion)
- * - Key is smaller than all existing keys (new node becomes head)
+ * With the sentinel (key 0) always present, a predecessor exists for any key in (0, MAX_KEY).
  */
 export function findPredecessor(state, key) {
     for (const node of state.nodes) {
@@ -88,36 +94,21 @@ export function previewInsert(state, key) {
     if (key <= ZERO_KEY) {
         return { error: 'Key must be greater than 0' };
     }
-    // Find predecessor (node where predecessor.key < key < predecessor.nextKey)
+    // Find predecessor (always exists due to sentinel at key 0)
     const predecessor = findPredecessor(state, key);
-    if (predecessor) {
-        // Normal case: inserting between existing nodes
-        const newNode = {
-            key,
-            index: state.nextIndex,
-            nextKey: predecessor.nextKey, // New node points to what predecessor pointed to
-        };
-        return {
-            newNode,
-            predecessorNode: predecessor,
-            predecessorIndex: predecessor.index,
-            predecessorNewNextKey: key, // Predecessor will now point to new node
-        };
+    if (!predecessor) {
+        return { error: `Could not find predecessor for key ${key}` };
     }
-    // No predecessor means either:
-    // 1. Tree is empty (first insertion)
-    // 2. Key is smaller than all existing keys (becomes new head)
-    const currentHead = findHeadNode(state);
     const newNode = {
         key,
         index: state.nextIndex,
-        nextKey: currentHead ? currentHead.key : MAX_KEY, // Point to current head or MAX_KEY if empty
+        nextKey: predecessor.nextKey,
     };
     return {
         newNode,
-        predecessorNode: null,
-        predecessorIndex: null,
-        predecessorNewNextKey: null, // No predecessor to update
+        predecessorNode: predecessor,
+        predecessorIndex: predecessor.index,
+        predecessorNewNextKey: key,
     };
 }
 /**

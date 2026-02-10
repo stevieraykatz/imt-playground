@@ -135,7 +135,8 @@ export interface IMTExportData {
  */
 export declare function exportTree(state: IMTState): IMTExportData;
 /**
- * Parse exported JSON back to IMTNode array
+ * Parse exported JSON back to IMTNode array.
+ * Ensures the sentinel (key 0) is at index 0 - prepends it if importing legacy data.
  */
 export declare function parseImportedNodes(data: IMTExportData): {
     depth: number;
