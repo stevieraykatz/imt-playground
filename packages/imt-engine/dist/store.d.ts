@@ -11,6 +11,12 @@ export declare const DEFAULT_STORAGE_DIR = "/tmp/imt";
 export interface TreeStoreConfig {
     /** Directory to store tree JSON files */
     storageDir?: string;
+    /**
+     * How often (ms) to batch-flush dirty trees to disk.
+     *  - 0  = write synchronously on every mutation (original behaviour)
+     *  - >0 = coalesce writes within this window (default: 100)
+     */
+    flushIntervalMs?: number;
 }
 export interface TreeMetadata {
     id: string;
@@ -27,6 +33,9 @@ export declare class TreeStore {
     private trees;
     private metadata;
     private storageDir;
+    private readonly flushIntervalMs;
+    private dirtyTrees;
+    private flushTimer;
     constructor(config?: TreeStoreConfig);
     /**
      * Create storage directory if it doesn't exist
@@ -45,9 +54,25 @@ export declare class TreeStore {
      */
     private loadTree;
     /**
-     * Save a tree to disk
+     * Persist a single tree to disk (synchronous I/O).
+     */
+    private persistTree;
+    /**
+     * Mark a tree as needing persistence.
+     * With flushIntervalMs > 0 the actual write is deferred so
+     * rapid mutations within the window are coalesced into one I/O.
      */
     private saveTree;
+    /**
+     * Immediately persist all dirty trees to disk.
+     * Safe to call multiple times; no-ops when nothing is dirty.
+     */
+    flush(): void;
+    /**
+     * Flush pending writes and release timers.
+     * Call this before letting the process exit.
+     */
+    close(): void;
     /**
      * Create a new empty tree
      *

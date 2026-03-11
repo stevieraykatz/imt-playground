@@ -64,3 +64,5 @@ export * from './engine.js';
 export * from './proof.js';
 export * from './store.js';
 export { createServer, startServer, type ServerConfig } from './server.js';
+export { type LogLevel, LOG_LEVELS, DEFAULT_LOG_LEVEL, isValidLogLevel } from './logger.js';
+export { AsyncSemaphore } from './concurrency.js';

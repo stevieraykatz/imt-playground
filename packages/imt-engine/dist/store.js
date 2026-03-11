@@ -18,7 +18,10 @@ export class TreeStore {
     constructor(config = {}) {
         this.trees = new Map();
         this.metadata = new Map();
+        this.dirtyTrees = new Set();
+        this.flushTimer = null;
         this.storageDir = config.storageDir ?? DEFAULT_STORAGE_DIR;
+        this.flushIntervalMs = config.flushIntervalMs ?? 100;
         this.ensureStorageDir();
         this.loadAllTrees();
     }
@@ -87,9 +90,9 @@ export class TreeStore {
         }
     }
     /**
-     * Save a tree to disk
+     * Persist a single tree to disk (synchronous I/O).
      */
-    saveTree(treeId) {
+    persistTree(treeId) {
         const tree = this.trees.get(treeId);
         if (!tree)
             return;
@@ -102,11 +105,49 @@ export class TreeStore {
         };
         const filePath = this.getTreePath(treeId);
         fs.writeFileSync(filePath, JSON.stringify(stored, null, 2));
-        // Update metadata
         this.metadata.set(treeId, {
             createdAt: stored.createdAt,
             updatedAt: stored.updatedAt,
         });
+    }
+    /**
+     * Mark a tree as needing persistence.
+     * With flushIntervalMs > 0 the actual write is deferred so
+     * rapid mutations within the window are coalesced into one I/O.
+     */
+    saveTree(treeId) {
+        if (this.flushIntervalMs <= 0) {
+            this.persistTree(treeId);
+            return;
+        }
+        this.dirtyTrees.add(treeId);
+        if (!this.flushTimer) {
+            this.flushTimer = setTimeout(() => {
+                this.flushTimer = null;
+                this.flush();
+            }, this.flushIntervalMs);
+        }
+    }
+    /**
+     * Immediately persist all dirty trees to disk.
+     * Safe to call multiple times; no-ops when nothing is dirty.
+     */
+    flush() {
+        if (this.flushTimer) {
+            clearTimeout(this.flushTimer);
+            this.flushTimer = null;
+        }
+        for (const treeId of this.dirtyTrees) {
+            this.persistTree(treeId);
+        }
+        this.dirtyTrees.clear();
+    }
+    /**
+     * Flush pending writes and release timers.
+     * Call this before letting the process exit.
+     */
+    close() {
+        this.flush();
     }
     /**
      * Create a new empty tree

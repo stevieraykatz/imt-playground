@@ -19,6 +19,12 @@ export const DEFAULT_STORAGE_DIR = '/tmp/imt';
 export interface TreeStoreConfig {
   /** Directory to store tree JSON files */
   storageDir?: string;
+  /**
+   * How often (ms) to batch-flush dirty trees to disk.
+   *  - 0  = write synchronously on every mutation (original behaviour)
+   *  - >0 = coalesce writes within this window (default: 100)
+   */
+  flushIntervalMs?: number;
 }
 
 export interface TreeMetadata {
@@ -37,9 +43,13 @@ export class TreeStore {
   private trees: Map<string, IMTState> = new Map();
   private metadata: Map<string, { createdAt: string; updatedAt: string }> = new Map();
   private storageDir: string;
+  private readonly flushIntervalMs: number;
+  private dirtyTrees = new Set<string>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: TreeStoreConfig = {}) {
     this.storageDir = config.storageDir ?? DEFAULT_STORAGE_DIR;
+    this.flushIntervalMs = config.flushIntervalMs ?? 100;
     this.ensureStorageDir();
     this.loadAllTrees();
   }
@@ -120,15 +130,15 @@ export class TreeStore {
   }
 
   /**
-   * Save a tree to disk
+   * Persist a single tree to disk (synchronous I/O).
    */
-  private saveTree(treeId: string): void {
+  private persistTree(treeId: string): void {
     const tree = this.trees.get(treeId);
     if (!tree) return;
 
     const meta = this.metadata.get(treeId);
     const exportData = exportTree(tree);
-    
+
     const stored = {
       ...exportData,
       createdAt: meta?.createdAt ?? new Date().toISOString(),
@@ -137,12 +147,54 @@ export class TreeStore {
 
     const filePath = this.getTreePath(treeId);
     fs.writeFileSync(filePath, JSON.stringify(stored, null, 2));
-    
-    // Update metadata
+
     this.metadata.set(treeId, {
       createdAt: stored.createdAt,
       updatedAt: stored.updatedAt,
     });
+  }
+
+  /**
+   * Mark a tree as needing persistence.
+   * With flushIntervalMs > 0 the actual write is deferred so
+   * rapid mutations within the window are coalesced into one I/O.
+   */
+  private saveTree(treeId: string): void {
+    if (this.flushIntervalMs <= 0) {
+      this.persistTree(treeId);
+      return;
+    }
+
+    this.dirtyTrees.add(treeId);
+    if (!this.flushTimer) {
+      this.flushTimer = setTimeout(() => {
+        this.flushTimer = null;
+        this.flush();
+      }, this.flushIntervalMs);
+    }
+  }
+
+  /**
+   * Immediately persist all dirty trees to disk.
+   * Safe to call multiple times; no-ops when nothing is dirty.
+   */
+  flush(): void {
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    for (const treeId of this.dirtyTrees) {
+      this.persistTree(treeId);
+    }
+    this.dirtyTrees.clear();
+  }
+
+  /**
+   * Flush pending writes and release timers.
+   * Call this before letting the process exit.
+   */
+  close(): void {
+    this.flush();
   }
 
   /**

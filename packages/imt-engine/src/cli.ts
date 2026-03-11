@@ -14,11 +14,14 @@
  */
 
 import { startServer } from './server.js';
+import { type LogLevel, DEFAULT_LOG_LEVEL, LOG_LEVELS, isValidLogLevel } from './logger.js';
 
 interface CliArgs {
   port: number;
   host: string;
   storageDir: string;
+  logLevel: LogLevel;
+  maxConcurrency: number;
   help: boolean;
   command: string;
 }
@@ -28,6 +31,8 @@ function parseArgs(args: string[]): CliArgs {
     port: 3001,
     host: '0.0.0.0',
     storageDir: '/tmp/imt-trees',
+    logLevel: DEFAULT_LOG_LEVEL,
+    maxConcurrency: 50,
     help: false,
     command: 'serve',
   };
@@ -52,6 +57,21 @@ function parseArgs(args: string[]): CliArgs {
       case '--storage':
       case '-s':
         result.storageDir = next;
+        i++;
+        break;
+      case '--log-level':
+      case '-l':
+        if (next && isValidLogLevel(next)) {
+          result.logLevel = next;
+        } else {
+          console.error(`Invalid log level "${next}". Valid levels: ${LOG_LEVELS.join(', ')}`);
+          process.exit(1);
+        }
+        i++;
+        break;
+      case '--max-concurrency':
+      case '-c':
+        result.maxConcurrency = Math.max(1, parseInt(next, 10) || 50);
         i++;
         break;
       case '--help':
@@ -81,14 +101,19 @@ Commands:
   serve     Start the HTTP API server (default)
 
 Options:
-  --port, -p <port>       Port to listen on (default: 3001)
-  --host, -h <host>       Host to bind to (default: 0.0.0.0)
-  --storage, -s <dir>     Storage directory (default: /tmp/imt-trees)
-  --help                  Show this help message
+  --port, -p <port>             Port to listen on (default: 3001)
+  --host, -h <host>             Host to bind to (default: 0.0.0.0)
+  --storage, -s <dir>           Storage directory (default: /tmp/imt-trees)
+  --log-level, -l <level>       Log verbosity: debug, info, warn, error, silent (default: warn)
+  --max-concurrency, -c <num>   Max concurrent requests (default: 50)
+  --help                        Show this help message
 
 Examples:
-  # Start server with defaults
+  # Start server with defaults (only 4xx/5xx logged)
   imt-engine serve
+
+  # Log all requests including 2xx
+  imt-engine serve --log-level info
 
   # Start on custom port
   imt-engine serve --port 8080
@@ -128,6 +153,8 @@ function main(): void {
         port: args.port,
         host: args.host,
         storageDir: args.storageDir,
+        logLevel: args.logLevel,
+        maxConcurrency: args.maxConcurrency,
       });
       break;
   }
