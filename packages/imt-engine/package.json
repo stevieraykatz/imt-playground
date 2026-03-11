@@ -1,6 +1,6 @@
 {
   "name": "@stevieraykatz/imt-engine",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "description": "Indexed Merkle Tree engine - a pure TypeScript implementation with HTTP API",
   "main": "./dist/index.js",
