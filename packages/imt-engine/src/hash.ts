@@ -8,20 +8,20 @@ import type { IMTNode } from './types.js';
 
 /**
  * Hash a single IMTNode to produce its leaf hash.
- * Hashes: keccak256(key || nextKey)
- * Each field is padded to 32 bytes (uint256).
+ * Double-hashes each field to prevent second preimage attacks:
+ *   keccak256(keccak256(key) || keccak256(nextKey))
+ *
+ * This mirrors the Solidity implementation:
+ *   keccak256(bytes.concat(keccak256(abi.encode(node.key)), keccak256(abi.encode(node.nextKey))))
  */
 export function hashNode(node: IMTNode): string {
-  const buffer = new Uint8Array(32 * 2); // 2 uint256 fields: key, nextKey
-  
-  // Pack key (32 bytes)
-  const keyBytes = bigintToBytes32(node.key);
-  buffer.set(keyBytes, 0);
-  
-  // Pack nextKey (32 bytes)
-  const nextKeyBytes = bigintToBytes32(node.nextKey);
-  buffer.set(nextKeyBytes, 32);
-  
+  const keyHash = keccak_256(bigintToBytes32(node.key));
+  const nextKeyHash = keccak_256(bigintToBytes32(node.nextKey));
+
+  const buffer = new Uint8Array(64);
+  buffer.set(keyHash, 0);
+  buffer.set(nextKeyHash, 32);
+
   const hash = keccak_256(buffer);
   return '0x' + bytesToHex(hash);
 }
@@ -44,10 +44,17 @@ export function hashPair(left: string, right: string): string {
 
 /**
  * Hash for an empty/zero leaf.
- * This is keccak256 of 64 zero bytes (2 x 32-byte zero fields: key, nextKey).
+ * Uses the same double-hashing scheme as hashNode:
+ *   keccak256(keccak256(0x00..00) || keccak256(0x00..00))
  */
 export function zeroHash(): string {
-  const buffer = new Uint8Array(32 * 2);
+  const zeroBytes = new Uint8Array(32);
+  const fieldHash = keccak_256(zeroBytes);
+
+  const buffer = new Uint8Array(64);
+  buffer.set(fieldHash, 0);
+  buffer.set(fieldHash, 32);
+
   const hash = keccak_256(buffer);
   return '0x' + bytesToHex(hash);
 }
