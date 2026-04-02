@@ -4,8 +4,14 @@
 import type { IMTNode } from './types.js';
 /**
  * Hash a single IMTNode to produce its leaf hash.
- * Hashes: keccak256(key || nextKey)
- * Each field is padded to 32 bytes (uint256).
+ *
+ * Domain separation against second preimage attacks: hashNode digests
+ * 32 bytes (the output of hashPair), while hashPair always digests
+ * 64 bytes. This makes it impossible to find a pair input that
+ * produces the same hash as a node, and vice-versa.
+ *
+ * Mirrors the Solidity implementation:
+ *   keccak256(bytes.concat(_hashPair(keccak256(abi.encode(key)), keccak256(abi.encode(nextKey)))))
  */
 export declare function hashNode(node: IMTNode): string;
 /**
@@ -14,8 +20,9 @@ export declare function hashNode(node: IMTNode): string;
  */
 export declare function hashPair(left: string, right: string): string;
 /**
- * Hash for an empty/zero leaf.
- * This is keccak256 of 64 zero bytes (2 x 32-byte zero fields: key, nextKey).
+ * Hash for an empty/zero leaf (key=0, nextKey=0).
+ * Uses the same node-hashing scheme as hashNode for consistency:
+ *   keccak256(hashPair(keccak256(0x00..00), keccak256(0x00..00)))
  */
 export declare function zeroHash(): string;
 /**

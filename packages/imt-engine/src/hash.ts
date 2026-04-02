@@ -8,22 +8,26 @@ import type { IMTNode } from './types.js';
 
 /**
  * Hash a single IMTNode to produce its leaf hash.
- * Double-hashes each field to prevent second preimage attacks:
- *   keccak256(keccak256(key) || keccak256(nextKey))
  *
- * This mirrors the Solidity implementation:
- *   keccak256(bytes.concat(keccak256(abi.encode(node.key)), keccak256(abi.encode(node.nextKey))))
+ * Domain separation against second preimage attacks: hashNode digests
+ * 32 bytes (the output of hashPair), while hashPair always digests
+ * 64 bytes. This makes it impossible to find a pair input that
+ * produces the same hash as a node, and vice-versa.
+ *
+ * Mirrors the Solidity implementation:
+ *   keccak256(bytes.concat(_hashPair(keccak256(abi.encode(key)), keccak256(abi.encode(nextKey)))))
  */
 export function hashNode(node: IMTNode): string {
   const keyHash = keccak_256(bigintToBytes32(node.key));
   const nextKeyHash = keccak_256(bigintToBytes32(node.nextKey));
 
-  const buffer = new Uint8Array(64);
-  buffer.set(keyHash, 0);
-  buffer.set(nextKeyHash, 32);
+  const pairBuffer = new Uint8Array(64);
+  pairBuffer.set(keyHash, 0);
+  pairBuffer.set(nextKeyHash, 32);
+  const pairHash = keccak_256(pairBuffer);
 
-  const hash = keccak_256(buffer);
-  return '0x' + bytesToHex(hash);
+  const nodeHash = keccak_256(pairHash);
+  return '0x' + bytesToHex(nodeHash);
 }
 
 /**
@@ -43,20 +47,21 @@ export function hashPair(left: string, right: string): string {
 }
 
 /**
- * Hash for an empty/zero leaf.
- * Uses the same double-hashing scheme as hashNode:
- *   keccak256(keccak256(0x00..00) || keccak256(0x00..00))
+ * Hash for an empty/zero leaf (key=0, nextKey=0).
+ * Uses the same node-hashing scheme as hashNode for consistency:
+ *   keccak256(hashPair(keccak256(0x00..00), keccak256(0x00..00)))
  */
 export function zeroHash(): string {
   const zeroBytes = new Uint8Array(32);
   const fieldHash = keccak_256(zeroBytes);
 
-  const buffer = new Uint8Array(64);
-  buffer.set(fieldHash, 0);
-  buffer.set(fieldHash, 32);
+  const pairBuffer = new Uint8Array(64);
+  pairBuffer.set(fieldHash, 0);
+  pairBuffer.set(fieldHash, 32);
+  const pairHash = keccak_256(pairBuffer);
 
-  const hash = keccak_256(buffer);
-  return '0x' + bytesToHex(hash);
+  const nodeHash = keccak_256(pairHash);
+  return '0x' + bytesToHex(nodeHash);
 }
 
 /**

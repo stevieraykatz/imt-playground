@@ -5,19 +5,24 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 /**
  * Hash a single IMTNode to produce its leaf hash.
- * Hashes: keccak256(key || nextKey)
- * Each field is padded to 32 bytes (uint256).
+ *
+ * Domain separation against second preimage attacks: hashNode digests
+ * 32 bytes (the output of hashPair), while hashPair always digests
+ * 64 bytes. This makes it impossible to find a pair input that
+ * produces the same hash as a node, and vice-versa.
+ *
+ * Mirrors the Solidity implementation:
+ *   keccak256(bytes.concat(_hashPair(keccak256(abi.encode(key)), keccak256(abi.encode(nextKey)))))
  */
 export function hashNode(node) {
-    const buffer = new Uint8Array(32 * 2); // 2 uint256 fields: key, nextKey
-    // Pack key (32 bytes)
-    const keyBytes = bigintToBytes32(node.key);
-    buffer.set(keyBytes, 0);
-    // Pack nextKey (32 bytes)
-    const nextKeyBytes = bigintToBytes32(node.nextKey);
-    buffer.set(nextKeyBytes, 32);
-    const hash = keccak_256(buffer);
-    return '0x' + bytesToHex(hash);
+    const keyHash = keccak_256(bigintToBytes32(node.key));
+    const nextKeyHash = keccak_256(bigintToBytes32(node.nextKey));
+    const pairBuffer = new Uint8Array(64);
+    pairBuffer.set(keyHash, 0);
+    pairBuffer.set(nextKeyHash, 32);
+    const pairHash = keccak_256(pairBuffer);
+    const nodeHash = keccak_256(pairHash);
+    return '0x' + bytesToHex(nodeHash);
 }
 /**
  * Hash two sibling nodes to produce parent hash.
@@ -33,13 +38,19 @@ export function hashPair(left, right) {
     return '0x' + bytesToHex(hash);
 }
 /**
- * Hash for an empty/zero leaf.
- * This is keccak256 of 64 zero bytes (2 x 32-byte zero fields: key, nextKey).
+ * Hash for an empty/zero leaf (key=0, nextKey=0).
+ * Uses the same node-hashing scheme as hashNode for consistency:
+ *   keccak256(hashPair(keccak256(0x00..00), keccak256(0x00..00)))
  */
 export function zeroHash() {
-    const buffer = new Uint8Array(32 * 2);
-    const hash = keccak_256(buffer);
-    return '0x' + bytesToHex(hash);
+    const zeroBytes = new Uint8Array(32);
+    const fieldHash = keccak_256(zeroBytes);
+    const pairBuffer = new Uint8Array(64);
+    pairBuffer.set(fieldHash, 0);
+    pairBuffer.set(fieldHash, 32);
+    const pairHash = keccak_256(pairBuffer);
+    const nodeHash = keccak_256(pairHash);
+    return '0x' + bytesToHex(nodeHash);
 }
 /**
  * Precompute zero hashes for each level of the tree.
