@@ -9,6 +9,7 @@ An Indexed Merkle Tree is a data structure that enables efficient non-membership
 IMTs are used in privacy-preserving systems where you need to prove a note hasn't been spent without revealing which note you're spending.
 
 **Want the full theory?** Read [Aztec's excellent documentation on IMTs](https://docs.aztec.network/developers/docs/foundational-topics/advanced/storage/indexed_merkle_tree).
+This playground is especially helpful for developers who want an intuitive, visual understanding of IMTs before diving into formal proofs.
 
 ### Features
 
